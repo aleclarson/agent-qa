@@ -181,7 +181,13 @@ func TestListTargets(t *testing.T) {
 	f.call(1, "targets")
 	f.config(config{Version: 1, Settings: map[string]string{"port": "4100"}, Targets: map[string]target{
 		"desktop": {},
-		"ios":     {Build: &step{Command: []string{"build-fixture-app"}}},
+		"ios": {
+			Settings: map[string]string{"device": "project simulator"},
+			Build: &step{
+				Command: []string{"sh", "-c", `printf '%s\n' "$1" > .built-device`, "sh", "${device}"},
+				Outputs: []string{".built-device"},
+			},
+		},
 		"web": {
 			Dependencies: &step{Command: []string{"install-fixture-deps"}},
 			Build:        &step{Command: []string{"build-fixture-app"}},
@@ -192,7 +198,8 @@ func TestListTargets(t *testing.T) {
 			},
 		},
 	}})
-	writeFixture(t, f.dir, localName, `{"targets":{"web":{"settings":{"port":"4200"}}}}`)
+	writeFixture(t, f.dir, ".gitignore", localName+"\n.built-device\n")
+	writeFixture(t, f.dir, localName, `{"targets":{"ios":{"settings":{"device":"local simulator"}},"web":{"settings":{"port":"4200"}}}}`)
 	commonDir := filepath.Join(f.dir, ".git")
 	output := f.call(0, "targets")
 	lines := strings.Split(output, "\n")
@@ -202,12 +209,20 @@ func TestListTargets(t *testing.T) {
 	for i, line := range lines[1:] {
 		lines[i+1] = strings.Join(strings.Fields(line), " ")
 	}
-	want := "TARGET PREP MANAGED SERVER APP URL\ndesktop - no -\nios build no -\nweb dependencies, build yes http://127.0.0.1:4200/app"
+	want := `TARGET PREP MANAGED SERVER APP URL DEVICE
+desktop - no - -
+ios build no - "local simulator"
+web dependencies, build yes http://127.0.0.1:4200/app -`
 	if got := strings.Join(lines[1:], "\n"); got != want {
 		t.Fatalf("unexpected target listing:\n%s", output)
 	}
 	if _, err := os.Stat(filepath.Join(commonDir, "agent-qa")); !os.IsNotExist(err) {
 		t.Fatalf("listing created QA state or could not check for it: %v", err)
+	}
+	f.up("ios", f.commit())
+	got := f.call(0, "run", "ios", "--", "sh", "-c", `cat .built-device; printf '%s\n' "$1"`, "sh", "${device}")
+	if got != "local simulator\nlocal simulator" {
+		t.Fatalf("build and runner must use the listed selector, got %q", got)
 	}
 	writeFixture(t, f.dir, localName, `{"targets":{"typo":{"settings":{"port":"4200"}}}}`)
 	f.call(1, "targets")

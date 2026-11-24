@@ -12,7 +12,8 @@ agent-qa targets
 ```
 
 In a configured project, this lists each named setup, called a **target**,
-along with its preparation steps and the app URL for any managed server.
+along with its preparation steps, managed app URL, and device selector
+when configured.
 
 ## Ask your agent to set up the project
 
@@ -55,9 +56,10 @@ agent-qa up ios --ref "$sha"
 agent-qa run ios -- maestro --device '${device}' test .maestro/ios-smoke.yaml
 ```
 
-Set `device` to your iOS device ID in `.agent-qa.local.json`. The single
-quotes pass `${device}` to `agent-qa`, which substitutes the target's setting
-as one argument. Placeholders without a matching setting pass through unchanged.
+Set `device` to your iOS device ID in the target's settings in
+`.agent-qa.local.json`. Use `${device}` in the build command and test runner
+to share the selector shown by `agent-qa targets`. The single quotes pass
+`${device}` to `agent-qa`, which substitutes it as one argument.
 See the [setup reference](skills/agent-qa/references/setup.md) for an example.
 
 ## Keep the app open for another look

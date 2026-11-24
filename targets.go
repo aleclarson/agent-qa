@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 )
@@ -23,7 +24,7 @@ func (a app) listTargets(ctx context.Context, cwd string) error {
 		return err
 	}
 	out := tabwriter.NewWriter(a.out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(out, "TARGET\tPREP\tMANAGED SERVER\tAPP URL")
+	fmt.Fprintln(out, "TARGET\tPREP\tMANAGED SERVER\tAPP URL\tDEVICE")
 	for _, name := range sortedKeys(targets) {
 		t := targets[name]
 		var steps []string
@@ -41,7 +42,11 @@ func (a app) listTargets(ctx context.Context, cwd string) error {
 		if t.Server != nil {
 			server, appURL = "yes", t.Server.appURL()
 		}
-		fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", name, prep, server, appURL)
+		device := "-"
+		if selector := t.Settings["device"]; selector != "" {
+			device = strconv.Quote(selector)
+		}
+		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\n", name, prep, server, appURL, device)
 	}
 	return out.Flush()
 }

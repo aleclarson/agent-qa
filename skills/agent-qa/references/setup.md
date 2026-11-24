@@ -83,8 +83,12 @@ shell or tool to interpret. `run all` uses each target's own settings.
 agent-qa run ios -- maestro --device '${device}' test .maestro/ios-smoke.yaml
 ```
 
-Set `device` to the iOS device ID accepted by the runner. A managed server can
-start without a device setting when its setup and server config do not use it.
+Set `device` to the selector accepted by the build command and runner, such
+as an iOS simulator UDID. Reference `${device}` in both commands. The
+`DEVICE` column in `agent-qa targets` shows the effective selector, including
+any local override. If prep references `${device}`, supply a default in the
+project config when using `init`. It validates that config before applying
+local overrides.
 
 List configured targets with `agent-qa targets`. Acquire a harness lease
 if available, prepare with `agent-qa up <target> --ref <sha>`, then smoke-check
