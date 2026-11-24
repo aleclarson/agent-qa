@@ -16,6 +16,8 @@ agent-facing instructions and examples. Project configuration uses JSON.
   Use a short analogy when it makes a concept easier to grasp.
 - Offer a copyable prompt to hand project setup to an agent. Keep installation
   and configuration procedures in the skill's setup reference.
+- Keep each prompt paragraph on one source line. Use blank lines between
+  paragraphs.
 - Make the page easy to skim. Use descriptive headings, short paragraphs,
   and frequent command examples. Assume readers may stop at any point.
 - Keep source builds, test instructions, and other contributor or maintainer

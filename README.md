@@ -14,15 +14,9 @@ Copy this prompt into an agent working in your project.
 ```text
 Set up this project for GUI QA with agent-qa.
 
-Read skills/agent-qa/SKILL.md in https://github.com/aleclarson/agent-qa
-and follow its setup reference. Use this project's existing commands.
-Configure targets that can run on this machine, preserve existing QA
-settings, and keep machine-specific values local and credentials in the
-environment.
+Read skills/agent-qa/SKILL.md in https://github.com/aleclarson/agent-qa and follow its setup reference. Use this project's existing commands. Configure targets that can run on this machine, preserve existing QA settings, and keep machine-specific values local and credentials in the environment.
 
-Check the configured targets with agent-qa servers. Run one smoke check
-if there is a suitable commit and an available runner. Tell me which
-targets are ready, what you verified, and what still needs my input.
+Check the configured targets with agent-qa servers. Run one smoke check if there is a suitable commit and an available runner. Tell me which targets are ready, what you verified, and what still needs my input.
 ```
 
 ## Verify a fix in the running app
