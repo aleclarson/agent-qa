@@ -8,9 +8,11 @@ when a topic belongs there.
 - Write for people discovering or using agent-qa. Open with a concrete
   problem and what agent-qa makes possible. Give readers a useful command
   early.
-- Tell the story of a first run, then introduce capabilities one concept at
-  a time. Define unfamiliar terms where readers first need them. Use a short
-  analogy when it makes a concept easier to grasp.
+- Show what a reader can ask their agent to do. Introduce capabilities one
+  concept at a time. Define unfamiliar terms where readers first need them.
+  Use a short analogy when it makes a concept easier to grasp.
+- Offer a copyable prompt to hand project setup to an agent. Keep installation
+  and configuration procedures in the skill's setup reference.
 - Make the page easy to skim. Use descriptive headings, short paragraphs,
   and frequent command examples. Assume readers may stop at any point.
 - Keep source builds, test instructions, and other contributor or maintainer

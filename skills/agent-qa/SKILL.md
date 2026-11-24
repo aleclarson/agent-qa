@@ -1,9 +1,9 @@
 ---
 name: agent-qa
-description: Verify a running GUI app at the intended Git revision with agent-qa. Use for browser, mobile, or desktop smoke tests, reproducing UI bugs, and checking user flows or visual regressions in a live app.
+description: Set up agent-qa or verify a running GUI app at the intended Git revision. Use for browser, mobile, or desktop smoke tests, reproducing UI bugs, and checking user flows or visual regressions in a live app.
 ---
 
-Run from the project checkout. Read its QA instructions, `.agent-qa.json` (v1, argv arrays), and machine overrides in `.agent-qa.local.json`. Use effective ports/device selectors and environment credentials. See the [README](https://github.com/aleclarson/agent-qa#install) for installation and config examples.
+Run from the project checkout. Read its QA instructions, `.agent-qa.json` (v1, argv arrays), and machine overrides in `.agent-qa.local.json`. Use effective ports/device selectors and environment credentials. Read the [setup reference](references/setup.md) when installing agent-qa or configuring a project.
 
 Commands (prefix `agent-qa`):
 
