@@ -20,9 +20,9 @@ Configure targets that can run on this machine, preserve existing QA
 settings, and keep machine-specific values local and credentials in the
 environment.
 
-Validate the setup with agent-qa doctor --json. Run one smoke check if
-there is a suitable commit and an available runner. Tell me which targets
-are ready, what you verified, and what still needs my input.
+Check the configured targets with agent-qa servers. Run one smoke check
+if there is a suitable commit and an available runner. Tell me which
+targets are ready, what you verified, and what still needs my input.
 ```
 
 ## Verify a fix in the running app
@@ -75,13 +75,11 @@ agent-qa stop web
 ## Check what is running
 
 Ask your agent which servers are up, or why a target could not start. The
-server list includes running servers whose target was removed from config.
-The diagnostic report points to missing tools, port conflicts, the QA
-checkout, and the server log.
+server list shows status, addresses, and log paths. It includes running
+servers whose target was removed from config.
 
 ```sh
-agent-qa servers --json
-agent-qa doctor --json
+agent-qa servers
 ```
 
 ## Run the same check across targets

@@ -9,12 +9,12 @@ Commands (prefix `agent-qa`):
 
 - `--help` / `help` / `-h` — syntax.
 - `init [--from -] [--update]` — interactive by default, validated JSON on stdin with `--from -`. Replacing config requires `--update`. Derive setup from project commands when in scope.
-- `doctor --json` — read-only diagnostics for config, tools, worktree, prep, port conflicts, and readiness. Parse stdout even on failure. Missing worktrees and stopped servers are normal before setup.
+- `doctor` — JSON-only diagnostics for config, tools, worktree, prep, port conflicts, and readiness. For agent checks, use `servers` and the target log.
 - `up <target|all>` — initialize missing worktree at caller HEAD, otherwise retain its commit. Prepare dependencies, ensure server readiness, print worktree path, release reservation.
 - `run <target|all> --ref <sha> -- <command> [args...]` — reserve target, require clean worktree, detach at commit, prepare dependencies/build, ensure server readiness, run in QA worktree, preserve runner status. Keep test and cleanup inside the reservation. For external GUI tools, hold a runner with a ready/result handshake through cleanup.
 - `restart <target|all>` — restart or start the owned server at the existing QA checkout. Wait for readiness. Skips prep and builds.
 - `stop <target|all>` — stop owned servers, including removed targets.
-- `servers [--json]` — list configured servers and owned servers without config, grouped under the repository's primary checkout. Includes addresses, status, and logs.
+- `servers` — list configured servers and owned servers without config, grouped under the repository's primary checkout. Includes addresses, status, and logs. A stopped server is normal before setup.
 
 `all` is reserved. It selects configured server targets for `up`, `run`, and `restart`, and all owned servers in the repository for `stop`. Bulk operations reserve targets sequentially in name order, continue after target failures, and return the first failure. `run all` uses one resolved commit and the same argv throughout.
 

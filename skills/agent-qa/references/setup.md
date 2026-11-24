@@ -63,6 +63,6 @@ Settings precedence, low to high, is committed global, committed target,
 local global, local target. Pass secrets through the environment. Use each
 target's effective URL and device selector in the runner.
 
-Validate setup with `agent-qa doctor --json`. Smoke-check with
+Inspect configured servers with `agent-qa servers`. Smoke-check with
 `agent-qa run <target> --ref <sha> -- <runner>`. Report unavailable devices,
 tools, or committed scripts if they block the check.

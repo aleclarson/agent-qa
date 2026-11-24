@@ -3,6 +3,9 @@
 Give each document the detail its reader needs. Link to the other documents
 when a topic belongs there.
 
+Use plain-text CLI output in agent workflows. Omit `--json` invocations from
+agent-facing instructions and examples. Project configuration uses JSON.
+
 ## README.md
 
 - Write for people discovering or using agent-qa. Open with a concrete
