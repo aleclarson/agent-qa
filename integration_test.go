@@ -331,6 +331,36 @@ func TestRunDoesNotHoldMutationLockAndCleansUpOnInterrupt(t *testing.T) {
 	}
 }
 
+func TestRunExpandsEffectiveSettings(t *testing.T) {
+	t.Setenv("AGENT_QA_FIXTURE_USER", "shell user")
+	f := newFixture(t)
+	f.config(config{Version: 1, Settings: map[string]string{"device": "global device", "platform": "ios"}, Targets: map[string]target{
+		"ios": {Settings: map[string]string{"device": "target device"}},
+	}})
+	writeFixture(t, f.dir, ".gitignore", localName+"\n")
+	f.up("ios", f.commit())
+
+	check := func(wantDevice, wantPlatform string) {
+		t.Helper()
+		got := f.call(0, "run", "ios", "--", "sh", "-c",
+			`printf 'shell=<%s> argc=%s\n' "${AGENT_QA_FIXTURE_USER}" "$#"; printf '<%s>\n' "$@"`,
+			"sh", "--device", "${device}", "--platform=${platform}", "${AGENT_QA_FIXTURE_USER}")
+		want := fmt.Sprintf("shell=<shell user> argc=4\n<--device>\n<%s>\n<--platform=%s>\n<${AGENT_QA_FIXTURE_USER}>", wantDevice, wantPlatform)
+		if got != want {
+			t.Fatalf("run got %q, want %q", got, want)
+		}
+	}
+	check("target device", "ios")
+	writeFixture(t, f.dir, localName, `{"settings":{"device":"local global"}}`)
+	check("local global", "ios")
+	writeFixture(t, f.dir, localName, `{"settings":{"device":"local global"},"targets":{"ios":{"settings":{"device":"local target *"}}}}`)
+	check("local target *", "ios")
+	if err := os.Remove(filepath.Join(f.dir, configName)); err != nil {
+		t.Fatal(err)
+	}
+	check("${device}", "${platform}")
+}
+
 func TestFixtureServer(t *testing.T) {
 	args := os.Args
 	if args[len(args)-1] != "agent-qa-fixture-server" {
@@ -513,6 +543,10 @@ func TestBulkServerOperationsAndListing(t *testing.T) {
 	if got := other.call(42, "run", "all", "--", "sh", "-c",
 		`case "$PWD" in */alpha/worktree) echo alpha; exit 42;; */bravo/worktree) echo bravo; exit 19;; *) exit 99;; esac`); got != "alpha\nbravo" {
 		t.Fatalf("run all did not visit both server targets in name order: %q", got)
+	}
+	writeFixture(t, linked, localName, `{"targets":{"alpha":{"settings":{"device":"alpha device"}},"bravo":{"settings":{"device":"bravo device"}}}}`)
+	if got := other.call(0, "run", "all", "--", "printf", "<%s>\n", "${device}"); got != "<alpha device>\n<bravo device>" {
+		t.Fatalf("run all did not expand each target's device setting: %q", got)
 	}
 
 	delete(cfg.Targets, "alpha")

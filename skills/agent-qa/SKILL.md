@@ -14,7 +14,7 @@ Commands (prefix `agent-qa`):
 - `targets` — list every target in the calling checkout's config after local overrides, including targets without a managed server. Shows configured prep steps, app URLs, and the canonical Git common directory for leases.
 - `doctor` — JSON-only diagnostics for config, tools, worktree, prep, port conflicts, and readiness. For agent checks, use `servers` and the target log.
 - `up <target|all> --ref <sha>` — create or switch a clean QA worktree to the resolved commit, prepare dependencies/build, wait for server readiness, print commit, worktree, and app URL.
-- `run <target|all> -- <command> [args...]` — execute in the existing QA worktree and preserve exit status. Use after `up` for scripted QA. For interactive QA, pass the app URL or device ID to the GUI tool directly.
+- `run <target|all> -- <command> [args...]` — execute in the existing QA worktree and preserve exit status. After `--`, literal `${name}` expands using each target's effective settings, preserving argument boundaries and unmatched placeholders. Single-quote placeholders in the calling shell. Use after `up` for scripted QA. For interactive QA, pass the app URL or device ID to the GUI tool directly.
 - `restart <target|all>` — restart or start the owned server at the existing QA checkout. Wait for readiness. Skips prep and builds.
 - `stop <target|all>` — stop owned servers, including removed targets.
 - `servers` — list configured servers and owned servers without config, grouped under the repository's primary checkout. Includes addresses, status, and logs. A stopped server is normal before setup.

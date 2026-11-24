@@ -52,8 +52,13 @@ flow on the selected device.
 
 ```sh
 agent-qa up ios --ref "$sha"
-agent-qa run ios -- maestro --device "$device_id" test .maestro/ios-smoke.yaml
+agent-qa run ios -- maestro --device '${device}' test .maestro/ios-smoke.yaml
 ```
+
+Set `device` to your iOS device ID in `.agent-qa.local.json`. The single
+quotes pass `${device}` to `agent-qa`, which substitutes the target's setting
+as one argument. Placeholders without a matching setting pass through unchanged.
+See the [setup reference](skills/agent-qa/references/setup.md) for an example.
 
 ## Keep the app open for another look
 
@@ -98,5 +103,6 @@ agent-qa stop all
 
 The group covers the repository and its linked worktrees. When using leases,
 the harness holds each affected target. Separate clones have their own servers.
+`run all` expands settings separately for each target.
 
 [Agent skill](skills/agent-qa/SKILL.md) · [Contributing](CONTRIBUTING.md)

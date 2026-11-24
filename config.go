@@ -166,6 +166,7 @@ func (c config) resolve(local localConfig) (map[string]target, error) {
 }
 
 func resolveTarget(t target, settings map[string]string) (target, error) {
+	t.Settings = settings
 	expand := func(value string) (string, error) {
 		var err error
 		value = placeholder.ReplaceAllStringFunc(value, func(token string) string {

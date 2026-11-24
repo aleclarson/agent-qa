@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 )
@@ -61,7 +62,26 @@ func (a app) executeTarget(ctx context.Context, repo repository, name string, op
 		if !exists {
 			return fmt.Errorf("QA worktree is missing (run agent-qa up %s --ref <sha> first)", name)
 		}
-		return a.runCommand(ctx, w.tree, op.argv, nil)
+		argv := op.argv
+		if slices.ContainsFunc(argv, placeholder.MatchString) {
+			if targets == nil {
+				targets, err = loadConfig(repo.root)
+				if err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+			}
+			settings := targets[name].Settings
+			argv = slices.Clone(argv)
+			for i, arg := range argv {
+				argv[i] = placeholder.ReplaceAllStringFunc(arg, func(token string) string {
+					if value, ok := settings[token[2:len(token)-1]]; ok {
+						return value
+					}
+					return token
+				})
+			}
+		}
+		return a.runCommand(ctx, w.tree, argv, nil)
 	}
 	if op.command == "stop" {
 		// A missing configuration or target with no state needs no setup.

@@ -71,8 +71,20 @@ Put machine-specific overrides in Git-ignored `.agent-qa.local.json`.
 ```
 
 Settings precedence, low to high, is committed global, committed target,
-local global, local target. Pass secrets through the environment. Use each
-target's effective URL and device selector in the runner.
+local global, local target. Pass secrets through the environment.
+
+`run` expands literal `${name}` placeholders after `--` with the effective
+settings for the selected target. Use single quotes so the calling shell
+passes the placeholder through. Expansion preserves each argument, including
+spaces in setting values. Unmatched placeholders pass through for the invoked
+shell or tool to interpret. `run all` uses each target's own settings.
+
+```sh
+agent-qa run ios -- maestro --device '${device}' test .maestro/ios-smoke.yaml
+```
+
+Set `device` to the iOS device ID accepted by the runner. A managed server can
+start without a device setting when its setup and server config do not use it.
 
 List configured targets with `agent-qa targets`. Acquire a harness lease
 if available, prepare with `agent-qa up <target> --ref <sha>`, then smoke-check
