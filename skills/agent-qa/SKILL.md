@@ -3,7 +3,7 @@ name: agent-qa
 description: Set up agent-qa or verify a running GUI app at the intended Git revision. Use for browser, mobile, or desktop smoke tests, reproducing UI bugs, and checking user flows or visual regressions in a live app.
 ---
 
-Run from the project checkout. Read its QA instructions, `.agent-qa.json` (v1, argv arrays), and machine overrides in `.agent-qa.local.json`. Use effective ports/device selectors and environment credentials. Read the [setup reference](references/setup.md) when installing agent-qa or configuring a project.
+Run from the project checkout. Use `targets` to pick a target and read the project's QA instructions for the runner and device selector. Use environment credentials. Read the [setup reference](references/setup.md) when installing agent-qa or configuring a project.
 
 Configured dependency, build, and server commands can override inherited variables with an `env` map. Values can reference settings with `${name}`. Changes to resolved values invalidate prep or replace the server on the next `up`.
 
@@ -11,6 +11,7 @@ Commands (prefix `agent-qa`):
 
 - `--help` / `help` / `-h` — syntax.
 - `init [--from -] [--update]` — interactive by default, validated JSON on stdin with `--from -`. Replacing config requires `--update`. Derive setup from project commands when in scope.
+- `targets` — list every target in the calling checkout's config after local overrides, including targets without a managed server. Shows configured prep steps, app URLs, and the canonical Git common directory for leases.
 - `doctor` — JSON-only diagnostics for config, tools, worktree, prep, port conflicts, and readiness. For agent checks, use `servers` and the target log.
 - `up <target|all> --ref <sha>` — create or switch a clean QA worktree to the resolved commit, prepare dependencies/build, wait for server readiness, print commit, worktree, and app URL.
 - `run <target|all> -- <command> [args...]` — execute in the existing QA worktree and preserve exit status. Use after `up` for scripted QA. For interactive QA, pass the app URL or device ID to the GUI tool directly.

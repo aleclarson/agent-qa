@@ -19,6 +19,7 @@ type app struct {
 
 const usage = `Usage:
   agent-qa init [--from -] [--update]
+  agent-qa targets
   agent-qa doctor --json
   agent-qa up <target|all> --ref <sha>
   agent-qa run <target|all> -- <command> [args...]
@@ -77,6 +78,11 @@ func (a app) execute(ctx context.Context, args []string) error {
 		return a.doctor(ctx, cwd)
 	case "init":
 		return a.init(ctx, cwd, args[1:])
+	case "targets":
+		if len(args) != 1 {
+			return errors.New("usage: agent-qa targets")
+		}
+		return a.listTargets(ctx, cwd)
 	case "servers":
 		if len(args) > 2 || len(args) == 2 && args[1] != "--json" {
 			return errors.New("usage: agent-qa servers [--json]")

@@ -176,6 +176,43 @@ func TestInitAndDoctor(t *testing.T) {
 	}
 }
 
+func TestListTargets(t *testing.T) {
+	f := newFixture(t)
+	f.call(1, "targets")
+	f.config(config{Version: 1, Settings: map[string]string{"port": "4100"}, Targets: map[string]target{
+		"desktop": {},
+		"ios":     {Build: &step{Command: []string{"build-fixture-app"}}},
+		"web": {
+			Dependencies: &step{Command: []string{"install-fixture-deps"}},
+			Build:        &step{Command: []string{"build-fixture-app"}},
+			Server: &serverConfig{
+				Command:      []string{"start-fixture-server"},
+				ReadinessURL: "http://127.0.0.1:${port}/health",
+				AppURL:       "http://127.0.0.1:${port}/app",
+			},
+		},
+	}})
+	writeFixture(t, f.dir, localName, `{"targets":{"web":{"settings":{"port":"4200"}}}}`)
+	commonDir := filepath.Join(f.dir, ".git")
+	output := f.call(0, "targets")
+	lines := strings.Split(output, "\n")
+	if len(lines) == 0 || lines[0] != "Git common directory: "+commonDir {
+		t.Fatalf("missing canonical Git common directory:\n%s", output)
+	}
+	for i, line := range lines[1:] {
+		lines[i+1] = strings.Join(strings.Fields(line), " ")
+	}
+	want := "TARGET PREP MANAGED SERVER APP URL\ndesktop - no -\nios build no -\nweb dependencies, build yes http://127.0.0.1:4200/app"
+	if got := strings.Join(lines[1:], "\n"); got != want {
+		t.Fatalf("unexpected target listing:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(commonDir, "agent-qa")); !os.IsNotExist(err) {
+		t.Fatalf("listing created QA state or could not check for it: %v", err)
+	}
+	writeFixture(t, f.dir, localName, `{"targets":{"typo":{"settings":{"port":"4200"}}}}`)
+	f.call(1, "targets")
+}
+
 func TestSharedWorktreeAndDependencyReuse(t *testing.T) {
 	f := newFixture(t)
 	f.config(config{Version: 1, Targets: map[string]target{

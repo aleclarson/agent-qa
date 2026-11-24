@@ -7,6 +7,13 @@ server.
 `agent-qa` keeps a separate QA checkout at the commit you choose. It gets
 the app ready and lets the agent run the test while you keep editing.
 
+```sh
+agent-qa targets
+```
+
+In a configured project, this lists each named setup, called a **target**,
+along with its preparation steps and the app URL for any managed server.
+
 ## Ask your agent to set up the project
 
 Copy this prompt into an agent working in your project.
@@ -16,7 +23,7 @@ Set up this project for GUI QA with agent-qa.
 
 Read skills/agent-qa/SKILL.md in https://github.com/aleclarson/agent-qa and follow its setup reference. Use this project's existing commands. Configure targets that can run on this machine, preserve existing QA settings, and keep machine-specific values local and credentials in the environment.
 
-Check the configured targets with agent-qa servers. Run one smoke check if there is a suitable commit and an available runner. Tell me which targets are ready, what you verified, and what still needs my input.
+Check the configured targets with agent-qa targets. Run one smoke check if there is a suitable commit and an available runner. Tell me which targets are ready, what you verified, and what still needs my input.
 ```
 
 ## Verify a fix in the running app
@@ -32,10 +39,10 @@ agent-qa up web --ref "$sha"
 agent-qa run web -- maestro test .maestro/web-smoke.yaml
 ```
 
-A **target** is a named setup, such as `web` or `ios`. Each target gets one
-shared QA checkout, called a **worktree**. If several agents use it, their
-harness can lease the target for a turn, like booking a test device. The lease
-covers preparation, testing, and cleanup.
+Each target, such as `web` or `ios`, gets one shared QA checkout, called
+a **worktree**. If several agents use it, their harness can lease the
+target for a turn, like booking a test device. The lease covers preparation,
+testing, and cleanup.
 
 ## Test an app on a phone or emulator
 

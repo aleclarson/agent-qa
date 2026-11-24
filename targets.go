@@ -5,7 +5,45 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
+	"text/tabwriter"
 )
+
+func (a app) listTargets(ctx context.Context, cwd string) error {
+	repo, err := findRepository(ctx, cwd)
+	if err != nil {
+		return err
+	}
+	targets, err := loadConfig(repo.root)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(a.out, "Git common directory:", repo.common); err != nil {
+		return err
+	}
+	out := tabwriter.NewWriter(a.out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(out, "TARGET\tPREP\tMANAGED SERVER\tAPP URL")
+	for _, name := range sortedKeys(targets) {
+		t := targets[name]
+		var steps []string
+		if t.Dependencies != nil {
+			steps = append(steps, "dependencies")
+		}
+		if t.Build != nil {
+			steps = append(steps, "build")
+		}
+		prep := strings.Join(steps, ", ")
+		if prep == "" {
+			prep = "-"
+		}
+		server, appURL := "no", "-"
+		if t.Server != nil {
+			server, appURL = "yes", t.Server.appURL()
+		}
+		fmt.Fprintf(out, "%s\t%s\t%s\t%s\n", name, prep, server, appURL)
+	}
+	return out.Flush()
+}
 
 type targetOperation struct {
 	command string

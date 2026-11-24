@@ -74,7 +74,7 @@ Settings precedence, low to high, is committed global, committed target,
 local global, local target. Pass secrets through the environment. Use each
 target's effective URL and device selector in the runner.
 
-Inspect configured servers with `agent-qa servers`. Acquire a harness lease
+List configured targets with `agent-qa targets`. Acquire a harness lease
 if available, prepare with `agent-qa up <target> --ref <sha>`, then smoke-check
 with `agent-qa run <target> -- <runner>`. Report unavailable devices, tools,
 or committed scripts if they block the check.
