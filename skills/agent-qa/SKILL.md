@@ -3,38 +3,19 @@ name: agent-qa
 description: Verify a running GUI app at the intended Git revision with agent-qa. Use for browser, mobile, or desktop smoke tests, reproducing UI bugs, and checking user flows or visual regressions in a live app.
 ---
 
-# GUI QA with agent-qa
+Run from the project checkout. Read its QA instructions, `.agent-qa.json` (v1, argv arrays), and machine overrides in `.agent-qa.local.json`. Use effective ports/device selectors and environment credentials. See the [README](https://github.com/aleclarson/agent-qa#install) for installation and config examples.
 
-Use `agent-qa` to hold the target's reservation for the full GUI check. Use the
-project's browser or device runner to drive the app.
+Commands (prefix `agent-qa`):
 
-1. In the project checkout, read the repo's QA instructions and `.agent-qa.json`.
-   Pick the configured target and use the intended commit SHA. If the changes
-   are uncommitted, establish which committed revision can be tested or resolve
-   how to put the changes in a testable commit before claiming coverage.
-2. Run `agent-qa doctor --json` to inspect configuration, tools, worktree state,
-   and port conflicts. An unused target can have a stopped server or missing
-   QA worktree. If setup is in scope, derive the config from the project's
-   existing commands and use `agent-qa init --from -`. See the
-   [agent-qa README](https://github.com/aleclarson/agent-qa) for installation
-   and configuration examples.
-3. Run the full test and cleanup inside the reservation.
+- `--help` / `help` / `-h` — syntax.
+- `init [--from -] [--update]` — interactive by default, validated JSON on stdin with `--from -`. Replacing config requires `--update`. Derive setup from project commands when in scope.
+- `doctor --json` — read-only diagnostics for config, tools, worktree, prep, port conflicts, and readiness. Parse stdout even on failure. Missing worktrees and stopped servers are normal before setup.
+- `up <target|all>` — initialize missing worktree at caller HEAD, otherwise retain its commit. Prepare dependencies, ensure server readiness, print worktree path, release reservation.
+- `run <target|all> --ref <sha> -- <command> [args...]` — reserve target, require clean worktree, detach at commit, prepare dependencies/build, ensure server readiness, run in QA worktree, preserve runner status. Keep test and cleanup inside the reservation. For external GUI tools, hold a runner with a ready/result handshake through cleanup.
+- `restart <target|all>` — restart or start the owned server at the existing QA checkout. Wait for readiness. Skips prep and builds.
+- `stop <target|all>` — stop owned servers, including removed targets.
+- `servers [--json]` — list configured servers and owned servers without config, grouped under the repository's primary checkout. Includes addresses, status, and logs.
 
-   ```sh
-   agent-qa run "$target" --ref "$sha" -- ./qa/check-flow
-   ```
+`all` is reserved. It selects configured server targets for `up`, `run`, and `restart`, and all owned servers in the repository for `stop`. Bulk operations reserve targets sequentially in name order, continue after target failures, and return the first failure. `run all` uses one resolved commit and the same argv throughout.
 
-   Replace `./qa/check-flow` with the actual runner. `run` checks out the
-   revision, prepares the target, waits for the managed server, then invokes
-   the runner. If GUI actions use a separate tool, start a controllable runner
-   that signals when it has entered the reservation and stays active until
-   those actions and cleanup finish. Return the GUI result as the runner's
-   exit status. `up` prepares the target and starts the server, then releases
-   the reservation. Use `run` for the interaction itself.
-4. Use the target's effective URL and device settings. Follow the project's
-   device reservation rules if other targets can share the same hardware.
-   Use only GUI tools and evidence collection authorized for the task. Leave
-   a dirty QA worktree for inspection and report setup or readiness failures
-   alongside any checks that could run.
-
-Report the tested commit, target, flows exercised, and observed results.
+Linked worktrees share server state and reservations. Coordinate shared physical devices separately. Prep caches key on command and tracked input globs (full commit by default) and require declared outputs. Servers stay warm across compatible runs. Restart after server environment changes. Preserve dirty QA worktrees for inspection. Report the tested SHA, target, and outcomes. Coverage applies to committed code.
