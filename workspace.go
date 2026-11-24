@@ -97,10 +97,11 @@ func (r repository) storedTargets() ([]string, error) {
 	return names, nil
 }
 
-func (w workspace) lock(ctx context.Context) (*os.File, error) {
+func (w workspace) lockMutation(ctx context.Context) (*os.File, error) {
 	if err := os.MkdirAll(w.dir, 0700); err != nil {
 		return nil, err
 	}
+	// Keep the existing lock path so old versions synchronize with mutations.
 	f, err := os.OpenFile(filepath.Join(w.dir, "reservation.lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
@@ -259,6 +260,7 @@ func (a app) prepare(ctx context.Context, w workspace, name string, p preparatio
 		return err
 	}
 	fmt.Fprintf(a.err, "agent-qa: preparing %s in %s\n", name, w.tree)
+	a.out = a.err // Keep the readiness report on stdout.
 	if err := a.runCommand(ctx, w.tree, p.step.Command); err != nil {
 		return fmt.Errorf("%s preparation: %w", name, err)
 	}

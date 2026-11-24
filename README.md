@@ -28,26 +28,30 @@ targets are ready, what you verified, and what still needs my input.
 ## Verify a fix in the running app
 
 Ask your agent to reproduce a bug, check a user flow, or run a browser smoke
-test at a specific commit. It can run your project's own test command.
+test at a specific commit. `up` gets that version running and prints the
+app URL. Your agent can open it with a browser tool or run a saved Maestro
+flow against it.
 
 ```sh
 sha=$(git rev-parse HEAD)
-agent-qa run web --ref "$sha" -- ./qa/check-browser
+agent-qa up web --ref "$sha"
+agent-qa run web -- maestro test .maestro/web-smoke.yaml
 ```
 
-A **target** is a named setup, such as `web` or `ios`. Each target gets a
-spare Git checkout called a **worktree**. A reservation works like booking
-a test device. The next check on that target waits until the current test
-and its cleanup finish.
+A **target** is a named setup, such as `web` or `ios`. Each target gets one
+shared QA checkout, called a **worktree**. If several agents use it, their
+harness can lease the target for a turn, like booking a test device. The lease
+covers preparation, testing, and cleanup.
 
 ## Test an app on a phone or emulator
 
-A native target can install dependencies, build the app when needed, and
-run your project's device tests. Your agent can use the device settings for
-this machine and keep them out of Git.
+A native target can install dependencies and build the app when needed. Your
+agent can then explore the installed app with Maestro MCP or run a saved
+flow on the selected device.
 
 ```sh
-agent-qa run ios --ref "$sha" -- ./qa/check-ios
+agent-qa up ios --ref "$sha"
+agent-qa run ios -- maestro --device "$device_id" test .maestro/ios-smoke.yaml
 ```
 
 ## Keep the app open for another look
@@ -56,12 +60,9 @@ Your agent can start the app so you can open it yourself, then leave the
 server running for the next check.
 
 ```sh
-agent-qa up web
+agent-qa up web --ref "$sha"
 agent-qa servers
 ```
-
-`up` releases the reservation after the server is ready. A check that needs
-exclusive access uses `run`.
 
 Testing a different commit or changing the server config replaces the
 server. Your agent can also restart it directly, for example after an
@@ -89,11 +90,12 @@ can run it against each configured server target at the same commit.
 It can also start, restart, or stop servers as a group.
 
 ```sh
-agent-qa run all --ref "$sha" -- ./qa/check-application
+agent-qa up all --ref "$sha"
+agent-qa run all -- ./qa/check-application
 agent-qa stop all
 ```
 
-The group covers the repository and its linked worktrees. Separate clones
-have their own servers.
+The group covers the repository and its linked worktrees. When using leases,
+the harness holds each affected target. Separate clones have their own servers.
 
 [Agent skill](skills/agent-qa/SKILL.md) · [Contributing](CONTRIBUTING.md)

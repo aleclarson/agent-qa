@@ -26,7 +26,7 @@ agent-facing instructions and examples. Project configuration uses JSON.
 - Write a compact reference for agents. Omit the H1, narrative, and tutorial
   framing. Keep the frontmatter trigger focused on live GUI QA.
 - Cover every public command and useful flag. Capture behavior that affects
-  agent decisions, including reservations, cleanup, server ownership,
+  agent decisions, including harness leases, cleanup, server ownership,
   configuration, and bulk operations. Update the skill when the CLI changes.
 
 ## CONTRIBUTING.md

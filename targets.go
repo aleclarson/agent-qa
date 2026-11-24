@@ -9,23 +9,33 @@ import (
 
 type targetOperation struct {
 	command string
-	ref     string
+	commit  string
 	argv    []string
 }
 
 func (a app) executeTarget(ctx context.Context, repo repository, name string, op targetOperation, targets map[string]target) error {
 	w := repo.target(name)
+	if op.command == "run" {
+		exists, err := w.exists(ctx)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("QA worktree is missing (run agent-qa up %s --ref <sha> first)", name)
+		}
+		return a.runCommand(ctx, w.tree, op.argv)
+	}
 	if op.command == "stop" {
 		// A missing configuration or target with no state needs no setup.
 		if _, err := os.Stat(w.dir); errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
 	}
-	reservation, err := w.lock(ctx)
+	lock, err := w.lockMutation(ctx)
 	if err != nil {
 		return err
 	}
-	defer reservation.Close()
+	defer lock.Close()
 	if op.command == "stop" {
 		return w.stopServer(ctx)
 	}
@@ -42,7 +52,7 @@ func (a app) executeTarget(ctx context.Context, repo repository, name string, op
 	if op.command == "restart" {
 		return a.restart(ctx, w, t)
 	}
-	return a.upOrRun(ctx, repo, w, t, op.ref, op.argv)
+	return a.up(ctx, repo, w, name, t, op.commit)
 }
 
 func (a app) executeAll(ctx context.Context, repo repository, op targetOperation) error {
@@ -61,13 +71,6 @@ func (a app) executeAll(ctx context.Context, repo repository, op targetOperation
 	}
 	if err != nil {
 		return err
-	}
-	if op.command == "run" && len(names) > 0 {
-		// Resolve moving refs once so each target sees the same commit.
-		op.ref, err = resolveCommit(ctx, repo.root, op.ref)
-		if err != nil {
-			return err
-		}
 	}
 	var firstStatus int
 	for _, name := range names {

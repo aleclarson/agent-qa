@@ -10,12 +10,14 @@ Commands (prefix `agent-qa`):
 - `--help` / `help` / `-h` — syntax.
 - `init [--from -] [--update]` — interactive by default, validated JSON on stdin with `--from -`. Replacing config requires `--update`. Derive setup from project commands when in scope.
 - `doctor` — JSON-only diagnostics for config, tools, worktree, prep, port conflicts, and readiness. For agent checks, use `servers` and the target log.
-- `up <target|all>` — initialize missing worktree at caller HEAD, otherwise retain its commit. Prepare dependencies, ensure server readiness, print worktree path, release reservation.
-- `run <target|all> --ref <sha> -- <command> [args...]` — reserve target, require clean worktree, detach at commit, prepare dependencies/build, ensure server readiness, run in QA worktree, preserve runner status. Keep test and cleanup inside the reservation. For external GUI tools, hold a runner with a ready/result handshake through cleanup.
+- `up <target|all> --ref <sha>` — create or switch a clean QA worktree to the resolved commit, prepare dependencies/build, wait for server readiness, print commit, worktree, and app URL.
+- `run <target|all> -- <command> [args...]` — execute in the existing QA worktree and preserve exit status. Use after `up` for scripted QA. For interactive QA, pass the app URL or device ID to the GUI tool directly.
 - `restart <target|all>` — restart or start the owned server at the existing QA checkout. Wait for readiness. Skips prep and builds.
 - `stop <target|all>` — stop owned servers, including removed targets.
 - `servers` — list configured servers and owned servers without config, grouped under the repository's primary checkout. Includes addresses, status, and logs. A stopped server is normal before setup.
 
-`all` is reserved. It selects configured server targets for `up`, `run`, and `restart`, and all owned servers in the repository for `stop`. Bulk operations reserve targets sequentially in name order, continue after target failures, and return the first failure. `run all` uses one resolved commit and the same argv throughout.
+`all` selects configured server targets for `up`, `run`, and `restart`, and owned servers for `stop`. Bulk commands use name order and return the first failure after attempting the rest. `up all` resolves one commit. `run all` uses each existing worktree's current revision.
 
-Linked worktrees share server state and reservations. Coordinate shared physical devices separately. Prep caches key on command and tracked input globs (full commit by default) and require declared outputs. Servers stay warm across compatible runs. Restart after server environment changes. Preserve dirty QA worktrees for inspection. Report the tested SHA, target, and outcomes. Coverage applies to committed code.
+Lease each shared QA target through the harness before checkout or server changes. Key on the canonical Git common directory and target name across linked worktrees. Keep the lease through testing and cleanup. Reacquire it and call `up --ref` on later turns. Coordinate shared devices through the harness as needed. Servers stay warm after the turn.
+
+For Maestro web flows, use the reported app URL and run `agent-qa run web -- maestro test .maestro/web-smoke.yaml`. For Maestro MCP, supply the app URL or native device ID. Verify browser state between MCP calls. Report the tested SHA, target, and outcomes.

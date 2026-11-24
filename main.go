@@ -20,8 +20,8 @@ type app struct {
 const usage = `Usage:
   agent-qa init [--from -] [--update]
   agent-qa doctor --json
-  agent-qa up <target|all>
-  agent-qa run <target|all> --ref <sha> -- <command> [args...]
+  agent-qa up <target|all> --ref <sha>
+  agent-qa run <target|all> -- <command> [args...]
   agent-qa restart <target|all>
   agent-qa stop <target|all>
   agent-qa servers [--json]
@@ -82,13 +82,17 @@ func (a app) execute(ctx context.Context, args []string) error {
 			return errors.New("usage: agent-qa servers [--json]")
 		}
 		return a.servers(ctx, cwd, len(args) == 2)
-	case "up", "restart", "stop":
+	case "restart", "stop":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: agent-qa %s <target|all>", command)
 		}
+	case "up":
+		if len(args) != 4 || args[2] != "--ref" || args[3] == "" {
+			return errors.New("usage: agent-qa up <target|all> --ref <sha>")
+		}
 	case "run":
-		if len(args) < 6 || args[2] != "--ref" || args[3] == "" || args[4] != "--" {
-			return errors.New("usage: agent-qa run <target|all> --ref <sha> -- <command> [args...]")
+		if len(args) < 4 || args[2] != "--" {
+			return errors.New("usage: agent-qa run <target|all> -- <command> [args...] (select a revision with up --ref)")
 		}
 	default:
 		return fmt.Errorf("unknown command %q (see agent-qa --help)", command)
@@ -101,9 +105,16 @@ func (a app) execute(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	op := targetOperation{command: command, ref: "HEAD"}
-	if command == "run" {
-		op.ref, op.argv = args[3], args[5:]
+	op := targetOperation{command: command}
+	switch command {
+	case "up":
+		// Resolve moving refs once, including for up all.
+		op.commit, err = resolveCommit(ctx, repo.root, args[3])
+		if err != nil {
+			return err
+		}
+	case "run":
+		op.argv = args[3:]
 	}
 	if name == allTargets {
 		return a.executeAll(ctx, repo, op)
@@ -173,7 +184,7 @@ func (a app) init(ctx context.Context, cwd string, flags []string) error {
 	return err
 }
 
-func (a app) upOrRun(ctx context.Context, repo repository, w workspace, t target, ref string, argv []string) error {
+func (a app) up(ctx context.Context, repo repository, w workspace, name string, t target, desired string) error {
 	exists, err := w.exists(ctx)
 	if err != nil {
 		return err
@@ -188,18 +199,11 @@ func (a app) upOrRun(ctx context.Context, repo repository, w workspace, t target
 			return err
 		}
 	}
-	desired := head
-	if !exists || argv != nil {
-		desired, err = resolveCommit(ctx, repo.root, ref)
-		if err != nil {
-			return err
-		}
-	}
 	owned, err := w.ownedServer()
 	if err != nil {
 		return err
 	}
-	if owned != nil && (!exists || t.Server == nil || owned.Identity != serverIdentity(desired, t.Server)) {
+	if owned != nil && (head != desired || t.Server == nil || owned.Identity != serverIdentity(desired, t.Server)) {
 		if err := w.stopServer(ctx); err != nil {
 			return err
 		}
@@ -232,18 +236,16 @@ func (a app) upOrRun(ctx context.Context, repo repository, w workspace, t target
 			return err
 		}
 	}
-	if argv != nil {
-		build, err := w.planStep(ctx, "build", t.Build, desired, deps.key)
-		if err != nil {
+	build, err := w.planStep(ctx, "build", t.Build, desired, deps.key)
+	if err != nil {
+		return err
+	}
+	if build.needed {
+		if err := w.stopServer(ctx); err != nil {
 			return err
 		}
-		if build.needed {
-			if err := w.stopServer(ctx); err != nil {
-				return err
-			}
-			if err := a.prepare(ctx, w, "build", build, desired); err != nil {
-				return err
-			}
+		if err := a.prepare(ctx, w, "build", build, desired); err != nil {
+			return err
 		}
 	}
 	if err := w.requireClean(ctx); err != nil {
@@ -252,29 +254,14 @@ func (a app) upOrRun(ctx context.Context, repo repository, w workspace, t target
 	if err := a.ensureServer(ctx, w, t.Server, desired); err != nil {
 		return err
 	}
-	if argv == nil {
-		fmt.Fprintln(a.out, w.tree)
-		return nil
+	if _, err := fmt.Fprintf(a.out, "Target: %s\nCommit: %s\nWorktree: %s\n", name, desired, w.tree); err != nil {
+		return err
 	}
-	err = a.runCommand(ctx, w.tree, argv)
-	// A run that modifies the checkout invalidates a warm server, even
-	// when the requested command failed or was interrupted.
 	if t.Server != nil {
-		cleanup := context.Background()
-		cleanErr := w.requireClean(cleanup)
-		current, headErr := resolveCommit(cleanup, w.tree, "HEAD")
-		if cleanErr != nil || headErr != nil || current != desired {
-			if stopErr := w.stopServer(cleanup); stopErr != nil {
-				fmt.Fprintln(a.err, "agent-qa: could not stop server after checkout changed:", stopErr)
-				if err == nil {
-					return stopErr
-				}
-			} else {
-				fmt.Fprintln(a.err, "agent-qa: stopped server because the QA checkout changed during the run")
-			}
-		}
+		_, err := fmt.Fprintln(a.out, "App URL:", t.Server.appURL())
+		return err
 	}
-	return err
+	return nil
 }
 
 func (a app) restart(ctx context.Context, w workspace, t target) error {
@@ -286,7 +273,7 @@ func (a app) restart(ctx context.Context, w workspace, t target) error {
 		return err
 	}
 	if !exists {
-		return errors.New("QA worktree is missing (run agent-qa up first)")
+		return errors.New("QA worktree is missing (run agent-qa up --ref first)")
 	}
 	if err := w.requireClean(ctx); err != nil {
 		return err

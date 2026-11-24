@@ -39,13 +39,15 @@ JSON
   target can define `build` with the same fields as `dependencies` and a
   native build command that uses its device selector.
 - Commands are argv arrays. Use an explicit shell for shell behavior.
-  `${name}` expands string settings in command arguments and readiness URLs.
+  `${name}` expands string settings in command arguments and server URLs.
 - Prep inputs are repo-relative Git globs over tracked files. Include scripts,
   manifests, and lockfiles that affect the step. Omitting inputs keys the
   cache on the commit. Declare expected outputs and Git-ignore generated files.
 - Use a dedicated loopback port and an HTTP(S) readiness endpoint with an
   explicit port. Readiness requires a 2xx response. The timeout defaults to
   `30s`. Keep server processes in the foreground and fail if they cannot bind.
+- `up` reports the readiness URL's origin as the app URL by default. Set
+  `server.app_url` for a different URL, such as an app served under `/app`.
 - Config is read from the calling checkout. Commands run in the QA checkout.
   Required scripts must exist at the commit being tested.
 
@@ -63,6 +65,7 @@ Settings precedence, low to high, is committed global, committed target,
 local global, local target. Pass secrets through the environment. Use each
 target's effective URL and device selector in the runner.
 
-Inspect configured servers with `agent-qa servers`. Smoke-check with
-`agent-qa run <target> --ref <sha> -- <runner>`. Report unavailable devices,
-tools, or committed scripts if they block the check.
+Inspect configured servers with `agent-qa servers`. Acquire a harness lease
+if available, prepare with `agent-qa up <target> --ref <sha>`, then smoke-check
+with `agent-qa run <target> -- <runner>`. Report unavailable devices, tools,
+or committed scripts if they block the check.

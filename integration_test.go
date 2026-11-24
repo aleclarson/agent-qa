@@ -116,6 +116,18 @@ func (f fixture) call(want int, args ...string) string {
 	return strings.TrimSpace(stdout.String())
 }
 
+func (f fixture) up(name, ref string) string {
+	f.t.Helper()
+	output := f.call(0, "up", name, "--ref", ref)
+	for _, line := range strings.Split(output, "\n") {
+		if tree, ok := strings.CutPrefix(line, "Worktree: "); ok {
+			return tree
+		}
+	}
+	f.t.Fatalf("up did not report a worktree: %q", output)
+	return ""
+}
+
 func (f fixture) doctor(want int) doctorReport {
 	f.t.Helper()
 	var report doctorReport
@@ -142,6 +154,7 @@ func TestInitAndDoctor(t *testing.T) {
 	initStdin(`{"version":1,"targets":{"web":{"unknown":true}}}`, 1, "--from", "-")
 	initStdin(`{"version":2,"targets":{"web":{}}}`, 1, "--from", "-")
 	initStdin(`{"version":1,"targets":{"all":{}}}`, 1, "--from", "-")
+	initStdin(`{"version":1,"targets":{"web":{"server":{"command":["true"],"readiness_url":"http://localhost:4100/health","app_url":"/relative"}}}}`, 1, "--from", "-")
 	if _, err := os.Stat(filepath.Join(f.dir, configName)); !os.IsNotExist(err) {
 		t.Fatalf("invalid config created a file: %v", err)
 	}
@@ -182,11 +195,15 @@ func TestSharedWorktreeAndDependencyReuse(t *testing.T) {
 	linked := filepath.Join(t.TempDir(), "linked")
 	f.git("worktree", "add", "--detach", linked, first)
 	other := fixture{t, linked, f.binary}
-	tree := other.call(0, "up", "web")
-	if got := other.call(0, "run", "web", "--ref", first, "--", "sh", "-c", "printf '%s ' \"$PWD\"; cat code"); got != tree+" one" {
+	other.call(1, "run", "web", "--", "true")
+	other.call(1, "up", "web")
+	tree := other.up("web", "HEAD")
+	if got := f.call(0, "run", "web", "--", "sh", "-c", "printf '%s ' \"$PWD\"; cat code"); got != tree+" one" {
 		t.Fatalf("linked run got %q", got)
 	}
-	if got := f.call(0, "run", "web", "--ref", second, "--", "cat", "code"); got != "two" {
+	other.call(1, "run", "web", "--ref", second, "--", "true")
+	f.up("web", second)
+	if got := other.call(0, "run", "web", "--", "cat", "code"); got != "two" {
 		t.Fatalf("second checkout got %q", got)
 	}
 	readCalls := func(want int) {
@@ -197,14 +214,15 @@ func TestSharedWorktreeAndDependencyReuse(t *testing.T) {
 		}
 	}
 	readCalls(1)
-	f.call(0, "run", "web", "--ref", third, "--", "true")
+	f.up("web", third)
 	readCalls(2)
 	if err := os.Remove(filepath.Join(tree, ".cache", "installed")); err != nil {
 		t.Fatal(err)
 	}
-	f.call(0, "run", "web", "--ref", third, "--", "true")
+	f.call(42, "run", "web", "--", "sh", "-c", "exit 42")
+	readCalls(2)
+	f.up("web", third)
 	readCalls(3)
-	f.call(42, "run", "web", "--ref", third, "--", "sh", "-c", "exit 42")
 	if head, err := git(context.Background(), tree, "rev-parse", "--abbrev-ref", "HEAD"); err != nil || head != "HEAD" {
 		t.Fatalf("QA checkout must be detached: %q, %v", head, err)
 	}
@@ -212,7 +230,10 @@ func TestSharedWorktreeAndDependencyReuse(t *testing.T) {
 		t.Fatal("calling checkout changed")
 	}
 	writeFixture(t, tree, "untracked", "keep me")
-	other.call(1, "run", "web", "--ref", first, "--", "true")
+	other.call(1, "up", "web", "--ref", first)
+	if got := other.call(0, "run", "web", "--", "cat", "untracked"); got != "keep me" {
+		t.Fatalf("run could not inspect dirty checkout: %q", got)
+	}
 	if head, err := git(context.Background(), tree, "rev-parse", "HEAD"); err != nil || head != third {
 		t.Fatalf("dirty worktree was switched: %q, %v", head, err)
 	}
@@ -230,7 +251,7 @@ func awaitFixtureFile(t *testing.T, path string) {
 	t.Fatalf("did not see %s", path)
 }
 
-func TestReservationAcrossWorktreesThroughInterruptCleanup(t *testing.T) {
+func TestRunDoesNotHoldMutationLockAndCleansUpOnInterrupt(t *testing.T) {
 	f := newFixture(t)
 	f.config(config{Version: 1, Targets: map[string]target{"web": {}}})
 	writeFixture(t, f.dir, "code", "first")
@@ -240,33 +261,25 @@ func TestReservationAcrossWorktreesThroughInterruptCleanup(t *testing.T) {
 	linked := filepath.Join(t.TempDir(), "linked")
 	f.git("worktree", "add", "--detach", linked, first)
 	other := fixture{t, linked, f.binary}
-	started, cleaned, entered := filepath.Join(t.TempDir(), "started"), filepath.Join(t.TempDir(), "cleaned"), filepath.Join(t.TempDir(), "entered")
-	hold := f.command("run", "web", "--ref", first, "--", "sh", "-c",
-		`trap 'sleep 0.15; cat code > "$2"; exit 0' TERM; touch "$1"; while :; do sleep 1; done`, "sh", started, cleaned)
+	f.up("web", first)
+	markers := t.TempDir()
+	started, cleaned := filepath.Join(markers, "started"), filepath.Join(markers, "cleaned")
+	hold := f.command("run", "web", "--", "sh", "-c",
+		`trap 'sleep 0.15; touch "$2"; exit 0' TERM; touch "$1"; while :; do sleep 1; done`, "sh", started, cleaned)
 	if err := hold.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = hold.Process.Signal(syscall.SIGTERM); _ = hold.Wait() })
 	awaitFixtureFile(t, started)
-	waiter := other.command("run", "web", "--ref", second, "--", "sh", "-c",
-		`test "$(cat "$1")" = first && cat code > "$2"`, "sh", cleaned, entered)
-	if err := waiter.Start(); err != nil {
-		t.Fatal(err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	up := exec.CommandContext(ctx, other.binary, "up", "web", "--ref", second)
+	up.Dir = other.dir
+	if output, err := up.CombinedOutput(); err != nil {
+		t.Fatalf("run blocked checkout preparation: %v\n%s", err, output)
 	}
-	t.Cleanup(func() { _ = waiter.Process.Signal(syscall.SIGTERM); _ = waiter.Wait() })
-	cancelWaiter := other.command("run", "web", "--ref", second, "--", "false")
-	if err := cancelWaiter.Start(); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(250 * time.Millisecond)
-	if err := cancelWaiter.Process.Signal(syscall.SIGINT); err != nil {
-		t.Fatal(err)
-	}
-	if err := cancelWaiter.Wait(); exitStatus(err) != 130 {
-		t.Fatalf("queued cancellation: %v", err)
-	}
-	if _, err := os.Stat(entered); !os.IsNotExist(err) {
-		t.Fatalf("second command entered before reservation release: %v", err)
+	if got := other.call(0, "run", "web", "--", "cat", "code"); got != "second" {
+		t.Fatalf("second checkout: %q", got)
 	}
 	if err := hold.Process.Signal(syscall.SIGINT); err != nil {
 		t.Fatal(err)
@@ -274,12 +287,8 @@ func TestReservationAcrossWorktreesThroughInterruptCleanup(t *testing.T) {
 	if err := hold.Wait(); exitStatus(err) != 130 {
 		t.Fatalf("interrupted run: %v", err)
 	}
-	if err := waiter.Wait(); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(entered)
-	if err != nil || string(got) != "second" {
-		t.Fatalf("second checkout: %q, %v", got, err)
+	if _, err := os.Stat(cleaned); err != nil {
+		t.Fatalf("interrupted command did not clean up: %v", err)
 	}
 }
 
@@ -375,7 +384,8 @@ func TestBulkServerOperationsAndListing(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(stopped.GitCommonDir, "agent-qa")); !os.IsNotExist(err) {
 		t.Fatalf("servers created state: %v", err)
 	}
-	if got := other.call(0, "up", "all"); len(strings.Split(got, "\n")) != 2 {
+	if got := other.call(0, "up", "all", "--ref", "HEAD"); strings.Count(got, "Worktree: ") != 2 ||
+		strings.Count(got, "Commit: "+head) != 2 {
 		t.Fatalf("up all should print both worktrees: %q", got)
 	}
 	readBodies := func() []string {
@@ -402,7 +412,7 @@ func TestBulkServerOperationsAndListing(t *testing.T) {
 			t.Fatalf("server %d was not restarted: %q", i, body)
 		}
 	}
-	if got := other.call(42, "run", "all", "--ref", head, "--", "sh", "-c",
+	if got := other.call(42, "run", "all", "--", "sh", "-c",
 		`case "$PWD" in */alpha/worktree) echo alpha; exit 42;; */bravo/worktree) echo bravo; exit 19;; *) exit 99;; esac`); got != "alpha\nbravo" {
 		t.Fatalf("run all did not visit both server targets in name order: %q", got)
 	}
@@ -440,9 +450,9 @@ func TestServerLifecycle(t *testing.T) {
 	f.config(config{Version: 1, Targets: map[string]target{
 		"native": {
 			Build: &step{
-				Command: []string{"sh", "-c", "mkdir -p .cache; echo build >> .cache/builds"},
+				Command: []string{"sh", "-c", "mkdir -p .cache; echo build >> .cache/builds; touch .cache/app"},
 				Inputs:  []string{"native.lock"},
-				Outputs: []string{".cache/builds"},
+				Outputs: []string{".cache/app"},
 			},
 			Server: fixtureServer(t, address, "ready", "4s"),
 		},
@@ -458,13 +468,17 @@ func TestServerLifecycle(t *testing.T) {
 	if r := f.doctor(1).Targets[0].Server; !r.PortConflict || r.Owned {
 		t.Fatalf("expected foreign port conflict: %+v", r)
 	}
-	f.call(1, "up", "native")
+	f.call(1, "up", "native", "--ref", second)
 	f.call(1, "restart", "native")
 	if !portOccupied(context.Background(), address) {
 		t.Fatal("foreign listener was stopped")
 	}
 	conflict.Close()
-	tree := f.call(0, "up", "native")
+	out := f.call(0, "up", "native", "--ref", second)
+	if !strings.Contains(out, "Commit: "+second) || !strings.HasSuffix(out, "App URL: http://"+address) {
+		t.Fatalf("expected commit and app origin in handoff: %q", out)
+	}
+	tree := f.up("native", second)
 	readServer := func(want string) string {
 		t.Helper()
 		res, err := localHTTP.Get("http://" + address + "/ready")
@@ -480,31 +494,39 @@ func TestServerLifecycle(t *testing.T) {
 		return pid
 	}
 	initial := readServer("second")
+	buildLog := filepath.Join(tree, ".cache", "builds")
+	appOutput := filepath.Join(tree, ".cache", "app")
+	if b, err := os.ReadFile(buildLog); err != nil || string(b) != "build\n" {
+		t.Fatalf("up should build once: %q (%v)", b, err)
+	}
+	if err := os.Remove(appOutput); err != nil {
+		t.Fatal(err)
+	}
 	f.call(0, "restart", "native")
 	restarted := readServer("second")
 	if initial == restarted {
 		t.Fatal("restart reused the existing process")
 	}
-	buildLog := filepath.Join(tree, ".cache", "builds")
-	if _, err := os.Stat(buildLog); !os.IsNotExist(err) {
-		t.Fatalf("up/restart ran native build: %v", err)
-	}
+	f.call(0, "run", "native", "--", "true")
 	if r := f.doctor(0).Targets[0]; r.Ready || r.Build != "pending" || r.Server.Status != "ready" {
-		t.Fatalf("expected pending build and a ready server: %+v", r)
+		t.Fatalf("restart and run should leave the build pending: %+v", r)
 	}
-	f.call(0, "run", "native", "--ref", second, "--", "true")
+	if _, err := os.Stat(appOutput); !os.IsNotExist(err) {
+		t.Fatalf("restart or run prepared the native build: %v", err)
+	}
+	f.up("native", second)
 	built := readServer("second")
-	f.call(0, "run", "native", "--ref", second, "--", "true")
+	f.up("native", second)
 	if built != readServer("second") {
-		t.Fatal("identical run replaced a warm server")
+		t.Fatal("identical up replaced a warm server")
 	}
-	f.call(0, "run", "native", "--ref", first, "--", "true")
+	f.up("native", first)
 	if built == readServer("first") {
 		t.Fatal("switched commit reused stale server")
 	}
 	f.call(0, "restart", "native")
-	if b, err := os.ReadFile(buildLog); err != nil || string(b) != "build\n" {
-		t.Fatalf("build ran more than once: %q (%v)", b, err)
+	if b, err := os.ReadFile(buildLog); err != nil || string(b) != "build\nbuild\n" {
+		t.Fatalf("build should run on initial setup and missing output: %q (%v)", b, err)
 	}
 	if r := f.doctor(0).Targets[0]; !r.Ready || !r.Server.Owned || r.Head != first {
 		t.Fatalf("expected ready target at first commit: %+v", r)
@@ -515,18 +537,32 @@ func TestServerLifecycle(t *testing.T) {
 	if err := readJSON(cfgPath, &cfg); err != nil {
 		t.Fatal(err)
 	}
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Settings = map[string]string{"port": port}
+	cfg.Targets["native"].Server.AppURL = "http://127.0.0.1:${port}/app"
+	f.config(cfg)
+	out = f.call(0, "up", "native", "--ref", first)
+	if !strings.HasSuffix(out, "App URL: http://"+address+"/app") || beforeConfigChange != readServer("first") {
+		t.Fatalf("expected updated handoff URL with warm server: %q", out)
+	}
 	cfg.Targets["native"].Server.ReadinessURL += "?configured=2"
 	f.config(cfg)
 	if r := f.doctor(1).Targets[0]; r.Server.Status != "stale" {
 		t.Fatalf("expected stale server after config changed: %+v", r)
 	}
-	f.call(0, "run", "native", "--ref", first, "--", "true")
+	f.up("native", first)
 	if beforeConfigChange == readServer("first") {
 		t.Fatal("changed server definition reused the old server")
 	}
 	f.call(0, "stop", "native")
+	if got := f.call(0, "run", "native", "--", "cat", "code"); got != "first" {
+		t.Fatalf("run with stopped server got %q", got)
+	}
 	if portOccupied(context.Background(), address) {
-		t.Fatal("stopped server still occupies port")
+		t.Fatal("run started the stopped server")
 	}
 }
 
@@ -541,11 +577,11 @@ func TestInterruptedStartupIsCleanedUp(t *testing.T) {
 	writeFixture(t, f.dir, "code", "first")
 	head := f.commit()
 	t.Cleanup(func() { f.call(0, "stop", "web") })
-	run := f.command("run", "web", "--ref", head, "--", "false")
-	if err := run.Start(); err != nil {
+	up := f.command("up", "web", "--ref", head)
+	if err := up.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = run.Process.Signal(syscall.SIGTERM); _ = run.Wait() })
+	t.Cleanup(func() { _ = up.Process.Signal(syscall.SIGTERM); _ = up.Wait() })
 	deadline := time.Now().Add(5 * time.Second)
 	for !portOccupied(context.Background(), address) {
 		if time.Now().After(deadline) {
@@ -553,10 +589,10 @@ func TestInterruptedStartupIsCleanedUp(t *testing.T) {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	if err := run.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := up.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
-	if err := run.Wait(); exitStatus(err) != 143 {
+	if err := up.Wait(); exitStatus(err) != 143 {
 		t.Fatalf("startup interruption: %v", err)
 	}
 	if portOccupied(context.Background(), address) {
@@ -578,7 +614,7 @@ func TestUnreadyServerIsCleanedUp(t *testing.T) {
 	writeFixture(t, f.dir, "code", "first")
 	head := f.commit()
 	t.Cleanup(func() { f.call(0, "stop", "web") })
-	f.call(1, "run", "web", "--ref", head, "--", "false")
+	f.call(1, "up", "web", "--ref", head)
 	if portOccupied(context.Background(), address) {
 		t.Fatal("readiness timeout left the server running")
 	}

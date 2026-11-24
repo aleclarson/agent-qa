@@ -43,10 +43,12 @@ var localHTTP = &http.Client{
 }
 
 func serverIdentity(head string, s *serverConfig) string {
+	server := *s
+	server.AppURL = "" // The handoff URL does not change the running process.
 	return fingerprint(struct {
 		Head   string
 		Server *serverConfig
-	}{head, s})
+	}{head, &server})
 }
 
 func (w workspace) serverLease() string { return filepath.Join(w.dir, "server.lock") }

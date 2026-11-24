@@ -46,6 +46,16 @@ type serverConfig struct {
 	Command      []string `json:"command"`
 	ReadinessURL string   `json:"readiness_url"`
 	Timeout      string   `json:"timeout,omitempty"`
+	AppURL       string   `json:"app_url,omitempty"`
+}
+
+func (s serverConfig) appURL() string {
+	if s.AppURL != "" {
+		return s.AppURL
+	}
+	// A readiness route is often a health check. Hand off its origin.
+	u, _ := url.Parse(s.ReadinessURL)
+	return u.Scheme + "://" + u.Host
 }
 
 type localConfig struct {
@@ -224,6 +234,16 @@ func resolveTarget(t target, settings map[string]string) (target, error) {
 		}
 		if _, err := readinessAddress(s.ReadinessURL); err != nil {
 			return t, err
+		}
+		if s.AppURL != "" {
+			s.AppURL, err = expand(s.AppURL)
+			if err != nil {
+				return t, fmt.Errorf("server app URL: %w", err)
+			}
+			u, err := url.Parse(s.AppURL)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+				return t, errors.New("server app_url must be an absolute HTTP(S) URL without credentials")
+			}
 		}
 		if s.Timeout == "" {
 			s.Timeout = "30s"
