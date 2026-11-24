@@ -74,8 +74,27 @@ func findRepository(ctx context.Context, cwd string) (repository, error) {
 }
 
 func (r repository) target(name string) workspace {
-	dir := filepath.Join(r.common, "agent-qa", name)
+	dir := filepath.Join(r.stateDir(), name)
 	return workspace{dir: dir, tree: filepath.Join(dir, "worktree")}
+}
+
+func (r repository) stateDir() string { return filepath.Join(r.common, "agent-qa") }
+
+func (r repository) storedTargets() ([]string, error) {
+	entries, err := os.ReadDir(r.stateDir())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() && targetName.MatchString(entry.Name()) {
+			names = append(names, entry.Name())
+		}
+	}
+	return names, nil
 }
 
 func (w workspace) lock(ctx context.Context) (*os.File, error) {

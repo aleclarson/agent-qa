@@ -141,6 +141,7 @@ func TestInitAndDoctor(t *testing.T) {
 	}
 	initStdin(`{"version":1,"targets":{"web":{"unknown":true}}}`, 1, "--from", "-")
 	initStdin(`{"version":2,"targets":{"web":{}}}`, 1, "--from", "-")
+	initStdin(`{"version":1,"targets":{"all":{}}}`, 1, "--from", "-")
 	if _, err := os.Stat(filepath.Join(f.dir, configName)); !os.IsNotExist(err) {
 		t.Fatalf("invalid config created a file: %v", err)
 	}
@@ -326,6 +327,109 @@ func fixtureServer(t *testing.T, address, mode, timeout string) *serverConfig {
 		Command:      []string{self, "-test.run=^TestFixtureServer$", "--", address, mode, "agent-qa-fixture-server"},
 		ReadinessURL: "http://" + address + "/ready",
 		Timeout:      timeout,
+	}
+}
+
+func TestBulkServerOperationsAndListing(t *testing.T) {
+	f := newFixture(t)
+	servers := make(map[string]*serverConfig)
+	var listeners []net.Listener
+	for _, name := range []string{"alpha", "bravo"} {
+		listener := bindFixturePort(t)
+		servers[name] = fixtureServer(t, listener.Addr().String(), "ready", "4s")
+		listeners = append(listeners, listener)
+	}
+	for _, listener := range listeners {
+		listener.Close()
+	}
+	cfg := config{Version: 1, Targets: map[string]target{
+		"alpha": {Server: servers["alpha"]},
+		"bravo": {Server: servers["bravo"]},
+		"shell": {},
+	}}
+	f.config(cfg)
+	writeFixture(t, f.dir, "code", "first")
+	head := f.commit()
+	linked := filepath.Join(t.TempDir(), "linked")
+	f.git("worktree", "add", "--detach", linked, head)
+	other := fixture{t, linked, f.binary}
+	t.Cleanup(func() { f.call(0, "stop", "all") })
+
+	list := func(caller fixture) serverList {
+		t.Helper()
+		var report serverList
+		if err := json.Unmarshal([]byte(caller.call(0, "servers", "--json")), &report); err != nil {
+			t.Fatal(err)
+		}
+		if report.PrimaryCheckout != f.dir || len(report.Servers) != 2 {
+			t.Fatalf("unexpected server listing: %+v", report)
+		}
+		return report
+	}
+	stopped := list(other)
+	for _, row := range stopped.Servers {
+		if row.Status != "stopped" || !row.Configured || row.Owned {
+			t.Fatalf("expected a configured, stopped server: %+v", row)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(stopped.GitCommonDir, "agent-qa")); !os.IsNotExist(err) {
+		t.Fatalf("servers created state: %v", err)
+	}
+	if got := other.call(0, "up", "all"); len(strings.Split(got, "\n")) != 2 {
+		t.Fatalf("up all should print both worktrees: %q", got)
+	}
+	readBodies := func() []string {
+		t.Helper()
+		var bodies []string
+		for _, name := range []string{"alpha", "bravo"} {
+			res, err := localHTTP.Get(servers[name].ReadinessURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := io.ReadAll(res.Body)
+			res.Body.Close()
+			if err != nil || res.StatusCode != http.StatusOK {
+				t.Fatalf("server %s: %s %q (%v)", name, res.Status, body, err)
+			}
+			bodies = append(bodies, string(body))
+		}
+		return bodies
+	}
+	before := readBodies()
+	f.call(0, "restart", "all")
+	for i, body := range readBodies() {
+		if body == before[i] {
+			t.Fatalf("server %d was not restarted: %q", i, body)
+		}
+	}
+	if got := other.call(42, "run", "all", "--ref", head, "--", "sh", "-c",
+		`case "$PWD" in */alpha/worktree) echo alpha; exit 42;; */bravo/worktree) echo bravo; exit 19;; *) exit 99;; esac`); got != "alpha\nbravo" {
+		t.Fatalf("run all did not visit both server targets in name order: %q", got)
+	}
+
+	delete(cfg.Targets, "alpha")
+	f.config(cfg)
+	r := list(f)
+	if r.GitCommonDir != stopped.GitCommonDir || r.Servers[0].Target != "alpha" ||
+		r.Servers[0].Configured || !r.Servers[0].Owned || r.Servers[0].Status != "running" ||
+		r.Servers[1].Status != "ready" {
+		t.Fatalf("expected the removed target's running server: %+v", r)
+	}
+	if out := other.call(0, "servers"); !strings.Contains(out, "Primary checkout: "+r.PrimaryCheckout) ||
+		!strings.Contains(out, "alpha") || !strings.Contains(out, "bravo") {
+		t.Fatalf("unexpected text listing: %q", out)
+	}
+	writeFixture(t, linked, configName, "malformed")
+	if r := list(other); r.ConfigError == "" || r.Servers[0].Configured || r.Servers[1].Configured {
+		t.Fatalf("expected live servers despite config error: %+v", r)
+	}
+	other.call(0, "stop", "all")
+	other.call(0, "stop", "all")
+	for _, s := range servers {
+		address, err := readinessAddress(s.ReadinessURL)
+		if err != nil || portOccupied(context.Background(), address) {
+			t.Fatalf("stop all left server at %s (%v)", address, err)
+		}
 	}
 }
 

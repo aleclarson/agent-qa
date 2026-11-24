@@ -33,7 +33,8 @@ type targetReport struct {
 
 type serverReport struct {
 	Status       string `json:"status"`
-	ReadinessURL string `json:"readiness_url"`
+	Address      string `json:"address,omitempty"`
+	ReadinessURL string `json:"readiness_url,omitempty"`
 	Log          string `json:"log"`
 	Owned        bool   `json:"owned"`
 	PortConflict bool   `json:"port_conflict"`
@@ -156,14 +157,17 @@ func toolAvailable(dir, name string) bool {
 }
 
 func inspectServer(ctx context.Context, w workspace, head string, s *serverConfig) (*serverReport, error) {
-	report := &serverReport{Status: "stopped", ReadinessURL: s.ReadinessURL, Log: w.serverLog()}
+	address, _ := readinessAddress(s.ReadinessURL)
+	report := &serverReport{Status: "stopped", Address: address, ReadinessURL: s.ReadinessURL, Log: w.serverLog()}
 	state, err := w.ownedServer()
 	if err != nil {
 		report.Status = "unknown"
 		return report, fmt.Errorf("inspect server: %w", err)
 	}
-	address, _ := readinessAddress(s.ReadinessURL)
 	report.Owned = state != nil
+	if state != nil {
+		report.Address = state.Address
+	}
 	report.PortConflict = (state == nil || state.Address != address) && portOccupied(ctx, address)
 	switch {
 	case report.PortConflict:

@@ -21,6 +21,7 @@ import (
 
 const configName = ".agent-qa.json"
 const localName = ".agent-qa.local.json"
+const allTargets = "all"
 
 type config struct {
 	Version  int               `json:"version"`
@@ -128,6 +129,9 @@ func (c config) resolve(local localConfig) (map[string]target, error) {
 	resolved := make(map[string]target, len(c.Targets))
 	for _, name := range sortedKeys(c.Targets) {
 		t := c.Targets[name]
+		if name == allTargets {
+			return nil, fmt.Errorf("target name %q is reserved", name)
+		}
 		if !targetName.MatchString(name) {
 			return nil, fmt.Errorf("invalid target name %q (use lowercase letters, digits, underscores or hyphens)", name)
 		}

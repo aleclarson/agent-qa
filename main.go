@@ -20,10 +20,11 @@ type app struct {
 const usage = `Usage:
   agent-qa init [--from -] [--update]
   agent-qa doctor --json
-  agent-qa up <target>
-  agent-qa run <target> --ref <sha> -- <command> [args...]
-  agent-qa restart <target>
-  agent-qa stop <target>
+  agent-qa up <target|all>
+  agent-qa run <target|all> --ref <sha> -- <command> [args...]
+  agent-qa restart <target|all>
+  agent-qa stop <target|all>
+  agent-qa servers [--json]
 `
 
 func main() {
@@ -76,13 +77,18 @@ func (a app) execute(ctx context.Context, args []string) error {
 		return a.doctor(ctx, cwd)
 	case "init":
 		return a.init(ctx, cwd, args[1:])
+	case "servers":
+		if len(args) > 2 || len(args) == 2 && args[1] != "--json" {
+			return errors.New("usage: agent-qa servers [--json]")
+		}
+		return a.servers(ctx, cwd, len(args) == 2)
 	case "up", "restart", "stop":
 		if len(args) != 2 {
-			return fmt.Errorf("usage: agent-qa %s <target>", command)
+			return fmt.Errorf("usage: agent-qa %s <target|all>", command)
 		}
 	case "run":
 		if len(args) < 6 || args[2] != "--ref" || args[3] == "" || args[4] != "--" {
-			return errors.New("usage: agent-qa run <target> --ref <sha> -- <command> [args...]")
+			return errors.New("usage: agent-qa run <target|all> --ref <sha> -- <command> [args...]")
 		}
 	default:
 		return fmt.Errorf("unknown command %q (see agent-qa --help)", command)
@@ -95,37 +101,14 @@ func (a app) execute(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	w := repo.target(name)
-	if command == "stop" {
-		// A broken or removed config must never prevent stopping an owned
-		// server. A target without state needs no reservation or cleanup.
-		if _, err := os.Stat(w.dir); errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
+	op := targetOperation{command: command, ref: "HEAD"}
+	if command == "run" {
+		op.ref, op.argv = args[3], args[5:]
 	}
-	reservation, err := w.lock(ctx)
-	if err != nil {
-		return err
+	if name == allTargets {
+		return a.executeAll(ctx, repo, op)
 	}
-	defer reservation.Close()
-	if command == "stop" {
-		return w.stopServer(ctx)
-	}
-	targets, err := loadConfig(repo.root)
-	if err != nil {
-		return err
-	}
-	t, ok := targets[name]
-	if !ok {
-		return fmt.Errorf("unknown target %q", name)
-	}
-	if command == "restart" {
-		return a.restart(ctx, w, t)
-	}
-	if command == "up" {
-		return a.upOrRun(ctx, repo, w, t, "HEAD", nil)
-	}
-	return a.upOrRun(ctx, repo, w, t, args[3], args[5:])
+	return a.executeTarget(ctx, repo, name, op, nil)
 }
 
 func (a app) init(ctx context.Context, cwd string, flags []string) error {

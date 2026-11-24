@@ -133,6 +133,33 @@ agent-qa stop ios
   starts it if it is stopped. It runs neither preparation step. `stop` shuts
   down an owned server and works even if its config has been removed.
 
+### Manage all servers in a repository
+
+```sh
+agent-qa servers
+agent-qa servers --json
+agent-qa up all
+agent-qa run all --ref "$sha" -- ./qa/check-application
+agent-qa restart all
+agent-qa stop all
+```
+
+`servers` labels the repository by its primary checkout. Linked worktrees
+share the same server state through Git's common directory. The list shows
+managed servers configured in the invoking checkout, including stopped servers,
+as well as owned servers whose configuration is unavailable or was removed.
+
+`all` is a reserved target name. For `up`, `run`, and `restart`, it selects
+the invoking checkout's targets that declare managed servers. `run all` sends
+the same command and resolved commit to each selected target. `stop all` uses
+shared repository state to find owned servers, including those with missing or
+invalid config. Bulk commands work in target name order, take one reservation
+at a time, and continue after target failures. They return the first failing
+status. An interruption ends the bulk operation after the current target's
+cleanup.
+
+### Preparation and server lifecycle
+
 Preparation runs on first use, when its command or declared inputs change,
 or when a declared output is missing. Input patterns use Git's root-relative
 glob pathspecs, such as `**/package.json`, and match tracked files. With no input
