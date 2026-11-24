@@ -104,6 +104,9 @@ server to pick up changes to its inherited environment.
 
 ## Run browser and native QA
 
+The bundled [agent skill](skills/agent-qa/SKILL.md) guides coding agents through
+GUI checks that hold the target reservation for the full test.
+
 ```sh
 sha=$(git rev-parse HEAD)
 agent-qa doctor --json
