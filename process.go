@@ -31,12 +31,20 @@ func exitStatus(err error) int {
 	}
 }
 
-func (a app) runCommand(ctx context.Context, dir string, argv []string) error {
+func overlayEnv(base []string, overrides map[string]string) []string {
+	// os/exec keeps the last value for each environment variable.
+	for key, value := range overrides {
+		base = append(base, key+"="+value)
+	}
+	return base
+}
+
+func (a app) runCommand(ctx context.Context, dir string, argv []string, env map[string]string) error {
 	if ctx.Err() != nil {
 		return context.Cause(ctx)
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = dir, projectEnv(dir)
+	cmd.Dir, cmd.Env = dir, overlayEnv(projectEnv(dir), env)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = a.in, a.out, a.err
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {

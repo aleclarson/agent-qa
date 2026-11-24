@@ -261,7 +261,7 @@ func (a app) prepare(ctx context.Context, w workspace, name string, p preparatio
 	}
 	fmt.Fprintf(a.err, "agent-qa: preparing %s in %s\n", name, w.tree)
 	a.out = a.err // Keep the readiness report on stdout.
-	if err := a.runCommand(ctx, w.tree, p.step.Command); err != nil {
+	if err := a.runCommand(ctx, w.tree, p.step.Command, p.step.Env); err != nil {
 		return fmt.Errorf("%s preparation: %w", name, err)
 	}
 	if err := w.requireClean(ctx); err != nil {

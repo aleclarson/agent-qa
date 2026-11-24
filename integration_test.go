@@ -155,6 +155,8 @@ func TestInitAndDoctor(t *testing.T) {
 	initStdin(`{"version":2,"targets":{"web":{}}}`, 1, "--from", "-")
 	initStdin(`{"version":1,"targets":{"all":{}}}`, 1, "--from", "-")
 	initStdin(`{"version":1,"targets":{"web":{"server":{"command":["true"],"readiness_url":"http://localhost:4100/health","app_url":"/relative"}}}}`, 1, "--from", "-")
+	initStdin(`{"version":1,"targets":{"web":{"build":{"command":["true"],"env":{"A=B":"bad"}}}}}`, 1, "--from", "-")
+	initStdin(`{"version":1,"targets":{"web":{"build":{"command":["true"],"env":{"A":"${missing}"}}}}}`, 1, "--from", "-")
 	if _, err := os.Stat(filepath.Join(f.dir, configName)); !os.IsNotExist(err) {
 		t.Fatalf("invalid config created a file: %v", err)
 	}
@@ -304,6 +306,10 @@ func TestFixtureServer(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
+		if mode == "env" {
+			fmt.Fprint(w, os.Getenv("AGENT_QA_FIXTURE_VALUE"))
+			return
+		}
 		code, err := os.ReadFile("code")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -336,6 +342,61 @@ func fixtureServer(t *testing.T, address, mode, timeout string) *serverConfig {
 		Command:      []string{self, "-test.run=^TestFixtureServer$", "--", address, mode, "agent-qa-fixture-server"},
 		ReadinessURL: "http://" + address + "/ready",
 		Timeout:      timeout,
+	}
+}
+
+func TestConfiguredCommandEnvironment(t *testing.T) {
+	t.Setenv("AGENT_QA_FIXTURE_VALUE", "inherited")
+	t.Setenv("AGENT_QA_FIXTURE_CLEAR", "inherited")
+	f := newFixture(t)
+	port := bindFixturePort(t)
+	address := port.Addr().String()
+	port.Close()
+	server := fixtureServer(t, address, "env", "4s")
+	server.Env = map[string]string{"AGENT_QA_FIXTURE_VALUE": "server ${value}"}
+	f.config(config{Version: 1, Settings: map[string]string{"value": "default", "variant": "base"}, Targets: map[string]target{
+		"web": {
+			Dependencies: &step{
+				Command: []string{"sh", "-c", `printf '%s\n' "$AGENT_QA_FIXTURE_VALUE" >> deps.out`},
+				Env:     map[string]string{"AGENT_QA_FIXTURE_VALUE": "deps ${value}"},
+				Outputs: []string{"deps.out"},
+			},
+			Build: &step{
+				Command: []string{"sh", "-c", `printenv AGENT_QA_FIXTURE_CLEAR >/dev/null && printf '%s\n' "$AGENT_QA_FIXTURE_VALUE:$AGENT_QA_FIXTURE_CLEAR" >> build.out`},
+				Env:     map[string]string{"AGENT_QA_FIXTURE_VALUE": "build ${value} ${variant}", "AGENT_QA_FIXTURE_CLEAR": ""},
+				Outputs: []string{"build.out"},
+			},
+			Server: server,
+		},
+	}})
+	writeFixture(t, f.dir, ".gitignore", "*.out\n"+localName+"\n")
+	commit := f.commit()
+	t.Cleanup(func() { f.call(0, "stop", "web") })
+	tree := f.up("web", commit)
+	f.up("web", commit)
+	writeFixture(t, f.dir, localName, `{"targets":{"web":{"settings":{"value":"local"}}}}`)
+	f.up("web", commit)
+	writeFixture(t, f.dir, localName, `{"targets":{"web":{"settings":{"value":"local","variant":"changed"}}}}`)
+	f.up("web", commit)
+	for name, want := range map[string]string{
+		"deps.out":  "deps default\ndeps local\n",
+		"build.out": "build default base:\nbuild local base:\nbuild local changed:\n",
+	} {
+		got, err := os.ReadFile(filepath.Join(tree, name))
+		if err != nil || string(got) != want {
+			t.Fatalf("%s = %q, %v, want %q", name, got, err, want)
+		}
+	}
+	response, err := localHTTP.Get(server.ReadinessURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if got, err := io.ReadAll(response.Body); err != nil || string(got) != "server local" {
+		t.Fatalf("server response = %q, %v, want %q", got, err, "server local")
+	}
+	if got := f.call(0, "run", "web", "--", "printenv", "AGENT_QA_FIXTURE_VALUE"); got != "inherited" {
+		t.Fatalf("run got %q, want inherited environment", got)
 	}
 }
 

@@ -23,7 +23,7 @@ func (a app) executeTarget(ctx context.Context, repo repository, name string, op
 		if !exists {
 			return fmt.Errorf("QA worktree is missing (run agent-qa up %s --ref <sha> first)", name)
 		}
-		return a.runCommand(ctx, w.tree, op.argv)
+		return a.runCommand(ctx, w.tree, op.argv, nil)
 	}
 	if op.command == "stop" {
 		// A missing configuration or target with no state needs no setup.

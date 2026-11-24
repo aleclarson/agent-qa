@@ -29,6 +29,7 @@ type serverState struct {
 
 type serverLaunch struct {
 	Command []string
+	Env     map[string]string `json:",omitempty"`
 	Token   string
 	Address string
 }
@@ -178,7 +179,7 @@ func (w workspace) launchServer(ctx context.Context, s *serverConfig, identity, 
 	if err := writeJSON(w.serverState(), state, true, 0600); err != nil {
 		return nil, err
 	}
-	data, err := encodeJSON(serverLaunch{s.Command, state.Token, address})
+	data, err := encodeJSON(serverLaunch{Command: s.Command, Env: s.Env, Token: state.Token, Address: address})
 	if err != nil {
 		return nil, err
 	}
@@ -298,6 +299,9 @@ func serveManaged() error {
 		return errors.New("missing server command")
 	}
 	cmd := exec.Command(launch.Command[0], launch.Command[1:]...)
+	if len(launch.Env) > 0 {
+		cmd.Env = overlayEnv(cmd.Environ(), launch.Env)
+	}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
 		return err

@@ -5,6 +5,8 @@ description: Set up agent-qa or verify a running GUI app at the intended Git rev
 
 Run from the project checkout. Read its QA instructions, `.agent-qa.json` (v1, argv arrays), and machine overrides in `.agent-qa.local.json`. Use effective ports/device selectors and environment credentials. Read the [setup reference](references/setup.md) when installing agent-qa or configuring a project.
 
+Configured dependency, build, and server commands can override inherited variables with an `env` map. Values can reference settings with `${name}`. Changes to resolved values invalidate prep or replace the server on the next `up`.
+
 Commands (prefix `agent-qa`):
 
 - `--help` / `help` / `-h` — syntax.

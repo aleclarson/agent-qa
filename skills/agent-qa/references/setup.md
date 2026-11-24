@@ -10,7 +10,8 @@ for future Bash and Zsh sessions. Use the export for the current session.
 
 Use existing project commands. Pass version 1 JSON to `agent-qa init --from -`.
 If updating an existing config, preserve relevant entries and add `--update`.
-This example assumes `./qa/serve-web` and npm dependencies.
+This example assumes npm dependencies and a `./qa/serve-web` script that reads
+`PORT`.
 
 ```sh
 agent-qa init --from - <<'JSON'
@@ -25,7 +26,8 @@ agent-qa init --from - <<'JSON'
         "outputs": ["node_modules"]
       },
       "server": {
-        "command": ["./qa/serve-web", "--port", "${port}"],
+        "command": ["./qa/serve-web"],
+        "env": { "PORT": "${port}" },
         "readiness_url": "http://127.0.0.1:${port}/health",
         "timeout": "20s"
       }
@@ -40,6 +42,13 @@ JSON
   native build command that uses its device selector.
 - Commands are argv arrays. Use an explicit shell for shell behavior.
   `${name}` expands string settings in command arguments and server URLs.
+- Set an optional `env` object in `dependencies`, `build`, or `server` when
+  configuring with `init --from -`. Use environment variable names as keys and
+  strings as values. Values support `${name}` and override the inherited
+  environment for that command and its children. Use the calling environment
+  or an explicit path to locate the command's executable.
+- Changing a resolved `env` value invalidates the affected prep cache or
+  replaces the managed server on the next `up`.
 - Prep inputs are repo-relative Git globs over tracked files. Include scripts,
   manifests, and lockfiles that affect the step. Omitting inputs keys the
   cache on the commit. Declare expected outputs and Git-ignore generated files.

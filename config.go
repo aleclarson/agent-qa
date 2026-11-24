@@ -37,16 +37,18 @@ type target struct {
 }
 
 type step struct {
-	Command []string `json:"command"`
-	Inputs  []string `json:"inputs,omitempty"`
-	Outputs []string `json:"outputs,omitempty"`
+	Command []string          `json:"command"`
+	Env     map[string]string `json:"env,omitempty"`
+	Inputs  []string          `json:"inputs,omitempty"`
+	Outputs []string          `json:"outputs,omitempty"`
 }
 
 type serverConfig struct {
-	Command      []string `json:"command"`
-	ReadinessURL string   `json:"readiness_url"`
-	Timeout      string   `json:"timeout,omitempty"`
-	AppURL       string   `json:"app_url,omitempty"`
+	Command      []string          `json:"command"`
+	Env          map[string]string `json:"env,omitempty"`
+	ReadinessURL string            `json:"readiness_url"`
+	Timeout      string            `json:"timeout,omitempty"`
+	AppURL       string            `json:"app_url,omitempty"`
 }
 
 func (s serverConfig) appURL() string {
@@ -196,6 +198,23 @@ func resolveTarget(t target, settings map[string]string) (target, error) {
 		}
 		return result, nil
 	}
+	environment := func(env map[string]string) (map[string]string, error) {
+		if len(env) == 0 {
+			return nil, nil
+		}
+		result := make(map[string]string, len(env))
+		for _, key := range sortedKeys(env) {
+			if !settingName.MatchString(key) {
+				return nil, fmt.Errorf("invalid environment variable name %q", key)
+			}
+			value, err := expand(env[key])
+			if err != nil {
+				return nil, fmt.Errorf("env %s: %w", key, err)
+			}
+			result[key] = value
+		}
+		return result, nil
+	}
 	for _, field := range []struct {
 		name string
 		step **step
@@ -209,6 +228,10 @@ func resolveTarget(t target, settings map[string]string) (target, error) {
 			return t, fmt.Errorf("%s: %w", field.name, err)
 		}
 		s.Command = argv
+		s.Env, err = environment(s.Env)
+		if err != nil {
+			return t, fmt.Errorf("%s: %w", field.name, err)
+		}
 		for _, path := range append(slices.Clone(s.Inputs), s.Outputs...) {
 			if !filepath.IsLocal(path) || filepath.Clean(path) != path || path == "." || strings.ContainsRune(path, 0) {
 				return t, fmt.Errorf("%s: expected a relative path or glob, got %q", field.name, path)
@@ -228,6 +251,10 @@ func resolveTarget(t target, settings map[string]string) (target, error) {
 			return t, fmt.Errorf("server: %w", err)
 		}
 		s.Command = argv
+		s.Env, err = environment(s.Env)
+		if err != nil {
+			return t, fmt.Errorf("server: %w", err)
+		}
 		s.ReadinessURL, err = expand(s.ReadinessURL)
 		if err != nil {
 			return t, fmt.Errorf("server readiness URL: %w", err)
