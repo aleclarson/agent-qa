@@ -4,13 +4,30 @@ Run an exact Git revision in a reusable, isolated QA checkout. Each repository
 and target has one persistent worktree and one exclusive reservation shared
 across the repository's linked worktrees. The calling checkout stays untouched.
 
-Build locally on macOS or Linux with Go 1.22+ and Git 2.31+:
+## Install
+
+On macOS or Linux with Go 1.22+ and Git 2.31+, run:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/aleclarson/agent-qa/main/install.sh | bash
+```
+
+The installer clones `main`, builds with Go, and installs to
+`~/.local/bin/agent-qa`. It adds that directory to PATH for future Bash or Zsh
+sessions. Other shells can add it through their own startup config. To use
+the binary in your current Bash or Zsh session, run:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+From an existing checkout, build directly with:
 
 ```sh
 go build -o agent-qa .
 ```
 
-Put the executable on your PATH, then run it from inside a consuming Git
+Run the installed CLI from inside a consuming Git
 repository. Use project-owned scripts and a test runner of your choice.
 
 ## Configure a project
